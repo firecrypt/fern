@@ -13,7 +13,7 @@ extern crate log;
 extern crate tempdir;
 
 use std::io::prelude::*;
-use std::{fs, io, fmt};
+use std::{fmt, fs, io};
 
 #[test]
 fn test1_basic_usage_global_logger() {
@@ -79,7 +79,10 @@ fn test1_basic_usage_global_logger() {
         .expect("Failed to clean up temporary directory");
 }
 
-fn manual_log<T>(logger: &log::Log, level: log::Level, message: T) where T: fmt::Display {
+fn manual_log<T>(logger: &log::Log, level: log::Level, message: T)
+where
+    T: fmt::Display,
+{
     logger.log(&log::RecordBuilder::new()
         .args(format_args!("{}", message))
         .level(level)
@@ -129,9 +132,7 @@ fn test3_channel_logging() {
     // Create the channel
     let (send, recv) = mpsc::channel();
 
-    let (_, l) = fern::Dispatch::new()
-        .chain(send)
-        .into_log();
+    let (_, l) = fern::Dispatch::new().chain(send).into_log();
 
     manual_log(&*l, log::Level::Info, "message1");
     manual_log(&*l, log::Level::Info, "message2");
