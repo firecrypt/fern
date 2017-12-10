@@ -13,10 +13,10 @@ extern crate log;
 extern crate tempdir;
 
 use std::io::prelude::*;
-use std::{fs, io};
+use std::{fs, io, fmt};
 
 #[test]
-fn test1_basic_usage() {
+fn test1_basic_usage_global_logger() {
     // Create a temporary directory to put a log file into for testing
     let temp_log_dir = tempdir::TempDir::new("fern").expect("Failed to set up temporary directory");
     let log_file = temp_log_dir.path().join("test.log");
@@ -79,6 +79,13 @@ fn test1_basic_usage() {
         .expect("Failed to clean up temporary directory");
 }
 
+fn manual_log<T>(logger: &log::Log, level: log::Level, message: T) where T: fmt::Display {
+    logger.log(&log::RecordBuilder::new()
+        .args(format_args!("{}", message))
+        .level(level)
+        .build());
+}
+
 #[test]
 fn test2_line_seps() {
     // Create a temporary directory to put a log file into for testing
@@ -86,19 +93,18 @@ fn test2_line_seps() {
     let log_file = temp_log_dir.path().join("test_custom_line_sep.log");
 
     // Create a basic logger configuration
-    fern::Dispatch::new()
+    let (_, l) = fern::Dispatch::new()
         // default format is just the message if not specified
         // default log level is 'trace' if not specified (logs all messages)
         // output to the log file with the "\r\n" line separator.
         .chain(fern::Output::file(fern::log_file(&log_file).expect("Failed to open log file"), "\r\n"))
-        .apply()
-        .expect("Failed to initialize logger: global logger already set!");
+        .into_log();
 
-    info!("message1");
-    info!("message2");
+    manual_log(&*l, log::Level::Info, "message1");
+    manual_log(&*l, log::Level::Info, "message2");
 
     // ensure all File objects are dropped and OS buffers are flushed.
-    log::logger().flush();
+    l.flush();
 
     {
         let result = {
@@ -123,15 +129,14 @@ fn test3_channel_logging() {
     // Create the channel
     let (send, recv) = mpsc::channel();
 
-    fern::Dispatch::new()
+    let (_, l) = fern::Dispatch::new()
         .chain(send)
-        .apply()
-        .expect("Failed to initialize logger: global logger already set!");
+        .into_log();
 
-    info!("message1");
-    info!("message2");
+    manual_log(&*l, log::Level::Info, "message1");
+    manual_log(&*l, log::Level::Info, "message2");
 
-    log::logger().flush();
+    l.flush();
 
     assert_eq!(recv.recv().unwrap(), "message1\n");
     assert_eq!(recv.recv().unwrap(), "message2\n");

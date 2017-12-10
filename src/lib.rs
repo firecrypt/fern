@@ -217,28 +217,13 @@ mod log_impl;
 mod errors;
 
 /// A type alias for a log formatter.
+///
+/// As of fern `0.5`, the passed `fmt::Arguments` will always be the same as the given `log::Record`'s
+/// `.args()`.
 pub type Formatter = Fn(FormatCallback, &fmt::Arguments, &log::Record) + Sync + Send + 'static;
 
 /// A type alias for a log filter. Returning true means the record should succeed - false means it should fail.
 pub type Filter = Fn(&log::Metadata) -> bool + Send + Sync + 'static;
-
-/// Fern logging trait. This is necessary in order to allow for custom loggers taking in arguments that have already had
-/// a custom format applied to them.
-///
-/// The original `log::Log` trait's `log` method only accepts messages that were created using the log macros - this
-/// trait also accepts records which have had additional formatting applied to them.
-pub trait FernLog: Sync + Send {
-    /// Logs a log record, but with the given fmt::Arguments instead of the one contained in the LogRecord.
-    ///
-    /// This has access to the original record, but _should ignore_ the original `record.args()` and instead
-    /// use the passed in payload.
-    fn log_args(&self, payload: &fmt::Arguments, record: &log::Record);
-
-    /// Flushes any pending/buffered log records this logger may be holding onto.
-    ///
-    ///
-    fn flush(&self) {}
-}
 
 /// Convenience method for opening a log file with common options.
 ///

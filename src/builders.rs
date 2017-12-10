@@ -3,9 +3,9 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use std::{cmp, fmt, fs, io};
 
-use log;
+use log::{self, Log};
 
-use {log_impl, FernLog, Filter, FormatCallback, Formatter};
+use {log_impl, Filter, FormatCallback, Formatter};
 
 /// The base dispatch logger.
 ///
@@ -419,9 +419,13 @@ impl Dispatch {
                         None
                     }
                 }
-                OutputInner::Other(child_log) => {
+                OutputInner::OtherBoxed(child_log) => {
                     max_child_level = log::LevelFilter::Trace;
-                    Some(log_impl::Output::Other(child_log))
+                    Some(log_impl::Output::OtherBoxed(child_log))
+                }
+                OutputInner::OtherStatic(child_log) => {
+                    max_child_level = log::LevelFilter::Trace;
+                    Some(log_impl::Output::OtherStatic(child_log))
                 }
             })
             .collect();
@@ -489,11 +493,10 @@ impl Dispatch {
     pub fn apply(self) -> Result<(), log::SetLoggerError> {
         let (max_level, log) = self.into_log();
 
-        log::try_set_logger(|max_level_storage| {
-            max_level_storage.set(max_level);
+        log::set_boxed_logger(log)?;
+        log::set_max_level(max_level);
 
-            log
-        })
+        Ok(())
     }
 }
 
@@ -524,7 +527,9 @@ enum OutputInner {
     /// Passes all messages to other dispatch that's shared.
     SharedDispatch(SharedDispatch),
     /// Passes all messages to other logger.
-    Other(Box<FernLog>),
+    OtherBoxed(Box<Log>),
+    /// Passes all messages to other logger.
+    OtherStatic(&'static Log),
 }
 
 /// Configuration for a logger output.
@@ -544,10 +549,17 @@ impl From<SharedDispatch> for Output {
     }
 }
 
-impl From<Box<FernLog>> for Output {
+impl From<Box<Log>> for Output {
     /// Creates an output logger forwarding all messages to the custom logger.
-    fn from(log: Box<FernLog>) -> Self {
-        Output(OutputInner::Other(log))
+    fn from(log: Box<Log>) -> Self {
+        Output(OutputInner::OtherBoxed(log))
+    }
+}
+
+impl From<&'static Log> for Output {
+    /// Creates an output logger forwarding all messages to the custom logger.
+    fn from(log: &'static Log) -> Self {
+        Output(OutputInner::OtherStatic(log))
     }
 }
 
@@ -778,7 +790,10 @@ impl fmt::Debug for OutputInner {
             OutputInner::SharedDispatch(_) => f.debug_tuple("Output::SharedDispatch")
                 .field(&"<built Dispatch logger>")
                 .finish(),
-            OutputInner::Other { .. } => f.debug_tuple("Output::Other")
+            OutputInner::OtherBoxed { .. } => f.debug_tuple("Output::OtherBoxed")
+                .field(&"<boxed logger>")
+                .finish(),
+            OutputInner::OtherStatic { .. } => f.debug_tuple("Output::OtherStatic")
                 .field(&"<boxed logger>")
                 .finish(),
         }
